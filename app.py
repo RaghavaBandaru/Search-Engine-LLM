@@ -2,7 +2,6 @@ import streamlit as st
 from langchain_groq import ChatGroq
 from langchain_community.utilities import ArxivAPIWrapper, WikipediaAPIWrapper
 from langchain_community.tools import ArxivQueryRun, WikipediaQueryRun, DuckDuckGoSearchRun
-from langchain.tools import Tool
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.callbacks import StreamlitCallbackHandler
 from langchain import hub
@@ -10,7 +9,7 @@ from langchain import hub
 # -------------------------------------------------------------
 # UI
 # -------------------------------------------------------------
-st.title("🔎 LangChain - Chat with Search (Groq + ReAct Agent)")
+st.title("🔎 LangChain - Chat with Search (Groq + Llama 3.3 70B)")
 
 st.sidebar.title("Settings")
 api_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
@@ -20,7 +19,7 @@ if not api_key:
     st.stop()
 
 # -------------------------------------------------------------
-# Wrappers + Tools
+# Tools
 # -------------------------------------------------------------
 arxiv_wrapper = ArxivAPIWrapper(top_k_results=1, doc_content_chars_max=200)
 arxiv = ArxivQueryRun(api_wrapper=arxiv_wrapper)
@@ -33,18 +32,18 @@ duckduckgo = DuckDuckGoSearchRun(name="Search")
 tools = [duckduckgo, arxiv, wiki]
 
 # -------------------------------------------------------------
-# LLM
+# LLM (Groq Llama 3.3-70B)
 # -------------------------------------------------------------
 llm = ChatGroq(
     groq_api_key=api_key,
-    model_name="llama-3.3-70b-versatile",
+    model_name="llama-3.3-70b-versatile",   # UPDATED MODEL
     streaming=True
 )
 
 # -------------------------------------------------------------
-# New REACT Agent
+# ReAct Agent
 # -------------------------------------------------------------
-prompt = hub.pull("hwchase17/react")  # Standard ReAct prompt
+prompt = hub.pull("hwchase17/react")
 
 agent = create_react_agent(
     llm=llm,
@@ -59,19 +58,18 @@ agent_executor = AgentExecutor(
 )
 
 # -------------------------------------------------------------
-# Chat session history
+# Chat History
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Hi! I can search the web, Arxiv, and Wikipedia. How can I help you?"}
+        {"role": "assistant", "content": "Hi! I can search Arxiv, Wikipedia, and the web using Llama-3.3-70B. Ask me anything!"}
     ]
 
-# Display chat history
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 # -------------------------------------------------------------
-# User Input
+# Handle user input
 # -------------------------------------------------------------
 if prompt_text := st.chat_input("Ask me anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt_text})
@@ -87,5 +85,4 @@ if prompt_text := st.chat_input("Ask me anything..."):
 
         final_answer = response["output"]
         st.session_state.messages.append({"role": "assistant", "content": final_answer})
-
         st.write(final_answer)
