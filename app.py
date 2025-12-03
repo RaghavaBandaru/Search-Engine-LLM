@@ -1,14 +1,14 @@
 import streamlit as st
 from langchain_groq import ChatGroq
-from langchain_community.tools import DuckDuckGoSearchRun, ArxivQueryRun, WikipediaQueryRun
 from langchain_community.utilities import ArxivAPIWrapper, WikipediaAPIWrapper
+from langchain_community.tools import ArxivQueryRun, WikipediaQueryRun, DuckDuckGoSearchRun
+from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 from langgraph.prebuilt import create_react_agent
-from langchain.callbacks import StreamlitCallbackHandler
 
 # -------------------------------------------------------------
 # UI
 # -------------------------------------------------------------
-st.title("🔎 Search Chatbot (Groq + LangGraph ReAct Agent)")
+st.title("🔎 Search Chatbot (Groq + Llama 3.3 70B + LangGraph)")
 
 st.sidebar.title("Settings")
 groq_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
@@ -32,27 +32,30 @@ tools = [duck_tool, arxiv_tool, wiki_tool]
 llm = ChatGroq(
     groq_api_key=groq_key,
     model_name="llama-3.3-70b-versatile",
-    streaming=True,
+    streaming=True
 )
 
 # -------------------------------------------------------------
 # LangGraph ReAct Agent
 # -------------------------------------------------------------
-agent = create_react_agent(llm, tools)
+agent = create_react_agent(llm=llm, tools=tools)
 
 # -------------------------------------------------------------
 # Chat History
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! Ask me anything — I can search Arxiv, Wikipedia, and the web."}
+    st.session_state["messages"] = [
+        {
+            "role": "assistant",
+            "content": "Hi! I can search Arxiv, Wikipedia, and the web using Llama-3.3-70B. Ask me anything!"
+        }
     ]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 # -------------------------------------------------------------
-# Chat Input
+# Handle Input
 # -------------------------------------------------------------
 if user_input := st.chat_input("Ask me anything..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
