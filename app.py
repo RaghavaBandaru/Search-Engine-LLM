@@ -2,7 +2,7 @@ import streamlit as st
 from langchain_groq import ChatGroq
 from langchain_community.utilities import ArxivAPIWrapper, WikipediaAPIWrapper
 from langchain_community.tools import ArxivQueryRun, WikipediaQueryRun, DuckDuckGoSearchRun
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain.agents import create_react_agent
 from langchain.callbacks import StreamlitCallbackHandler
 from langchain import hub
 
@@ -36,7 +36,7 @@ tools = [duckduckgo, arxiv, wiki]
 # -------------------------------------------------------------
 llm = ChatGroq(
     groq_api_key=api_key,
-    model_name="llama-3.3-70b-versatile",   # UPDATED MODEL
+    model_name="llama-3.3-70b-versatile",
     streaming=True
 )
 
@@ -51,18 +51,13 @@ agent = create_react_agent(
     prompt=prompt
 )
 
-agent_executor = AgentExecutor(
-    agent=agent,
-    tools=tools,
-    verbose=True
-)
-
 # -------------------------------------------------------------
 # Chat History
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Hi! I can search Arxiv, Wikipedia, and the web using Llama-3.3-70B. Ask me anything!"}
+        {"role": "assistant",
+         "content": "Hi! I can search Arxiv, Wikipedia, and the web using Llama-3.3-70B. Ask me anything!"}
     ]
 
 for msg in st.session_state.messages:
@@ -78,11 +73,11 @@ if prompt_text := st.chat_input("Ask me anything..."):
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        response = agent_executor.invoke(
+        result = agent.invoke(
             {"input": prompt_text},
-            callbacks=[cb]
+            callbacks=[cb],
         )
 
-        final_answer = response["output"]
-        st.session_state.messages.append({"role": "assistant", "content": final_answer})
-        st.write(final_answer)
+        answer = result["output"]
+        st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.write(answer)
