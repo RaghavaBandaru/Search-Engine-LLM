@@ -46,9 +46,11 @@ llm = ChatGroq(
 # REQUIRED STATE SCHEMA FOR LANGGRAPH
 # -------------------------------------------------------------
 class AgentState(TypedDict):
-    messages: list     # conversation history
-    input: str         # user input
-    steps: list        # tool steps (ReAct requires this)
+    input: str
+    messages: list
+    steps: list
+    intermediate_steps: list
+    agent_outcome: dict
 
 
 # -------------------------------------------------------------
@@ -62,14 +64,11 @@ agent = create_react_agent(
 
 
 # -------------------------------------------------------------
-# Streamlit Message History
+# Chat History
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {
-            "role": "assistant",
-            "content": "Hi! I can search ArXiv, Wikipedia, and the web using Llama-3.3-70B. Ask me anything!"
-        }
+        {"role": "assistant", "content": "Hi! Ask me anything — I can search ArXiv, Wikipedia, and the Web."}
     ]
 
 for msg in st.session_state.messages:
@@ -88,16 +87,18 @@ if user_input:
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # Build proper LangGraph input state
+        # Build complete state
         state = {
-            "messages": st.session_state.messages,
             "input": user_input,
-            "steps": []          # MUST be present, even if empty
+            "messages": st.session_state.messages,
+            "steps": [],
+            "intermediate_steps": [],
+            "agent_outcome": {}
         }
 
-        output_state = agent.invoke(state, callbacks=[cb])
+        output = agent.invoke(state, callbacks=[cb])
 
-        answer = output_state["messages"][-1]["content"]
+        answer = output["messages"][-1]["content"]
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.write(answer)
