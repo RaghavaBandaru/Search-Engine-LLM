@@ -8,16 +8,14 @@ from langchain_community.tools import (
     DuckDuckGoSearchRun,
 )
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
-from langchain.agents import create_agent
-
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda
+from langchain.agents import initialize_agent, AgentType
 
 
 # -------------------------------------------------------------
 # UI
 # -------------------------------------------------------------
-st.title("🔎 Search Chatbot (Groq + Llama-3.3-70B + LangGraph)")
+st.title("🔎 Search Chatbot (Groq + Llama-3.3-70B)")
+st.sidebar.title("Settings")
 
 groq_key = st.sidebar.text_input("Groq API Key:", type="password")
 if not groq_key:
@@ -25,53 +23,41 @@ if not groq_key:
 
 
 # -------------------------------------------------------------
-# Tools
+# LLM
+# -------------------------------------------------------------
+llm = ChatGroq(
+    groq_api_key=groq_key,
+    model_name="llama-3.3-70b-versatile",
+    streaming=True,
+    temperature=0.2,
+    max_tokens=2048,
+)
+
+
+# -------------------------------------------------------------
+# Tools (text-only ReAct tools)
 # -------------------------------------------------------------
 tools = [
-    DuckDuckGoSearchRun(name="Search"),
+    DuckDuckGoSearchRun(name="search"),
     ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=1)),
     WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper(top_k_results=1)),
 ]
 
 
 # -------------------------------------------------------------
-# LLM (Groq) + Safety Wrapper
+# Classic ReAct Agent (Works perfectly with Groq)
 # -------------------------------------------------------------
-base_llm = ChatGroq(
-    groq_api_key=groq_key,
-    model_name="llama-3.3-70b-versatile",
-    temperature=0.2,
-    max_tokens=2048,
-    streaming=True,
-)
-
-# ---- FIX: Ensure messages ALWAYS contains content ----
-def ensure_valid_messages(input_messages):
-    if not input_messages or len(input_messages) == 0:
-        return [{"role": "system", "content": "You are a helpful AI assistant."}]
-
-    # If last message is empty → patch it
-    last = input_messages[-1]
-    if "content" not in last or not last["content"]:
-        last["content"] = "Hello, please continue."
-
-    return input_messages
-
-
-safe_llm = RunnableLambda(lambda messages: base_llm.invoke(ensure_valid_messages(messages)))
-
-
-# -------------------------------------------------------------
-# Agent
-# -------------------------------------------------------------
-agent = create_agent(
-    model=safe_llm,   # <<-- the important fix
+agent = initialize_agent(
     tools=tools,
+    llm=llm,
+    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    verbose=True,
+    handle_parsing_errors=True,
 )
 
 
 # -------------------------------------------------------------
-# Streamlit Chat UI
+# Streamlit Chat
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
@@ -82,9 +68,6 @@ for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 
-# -------------------------------------------------------------
-# Handle Input
-# -------------------------------------------------------------
 user_input = st.chat_input("Ask me anything…")
 
 if user_input:
@@ -94,19 +77,7 @@ if user_input:
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # LangGraph input
-        state = {
-            "messages": [{"role": "user", "content": user_input}],
-            "input": user_input
-        }
+        response = agent.run(user_input, callbacks=[cb])
 
-        result = agent.invoke(state, callbacks=[cb])
-
-        # Extract content safely
-        if hasattr(result, "content"):
-            answer = result.content
-        else:
-            answer = str(result)
-
-        st.session_state.messages.append({"role": "assistant", "content": answer})
-        st.write(answer)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.write(response)
