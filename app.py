@@ -1,102 +1,54 @@
 import streamlit as st
-from typing_extensions import TypedDict
-
 from langchain_groq import ChatGroq
-from langchain_community.utilities import ArxivAPIWrapper, WikipediaAPIWrapper
-from langchain_community.tools import ArxivQueryRun, WikipediaQueryRun, DuckDuckGoSearchRun
-from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
+from langchain_community.utilities import ArxivAPIWrapper,WikipediaAPIWrapper
+from langchain_community.tools import ArxivQueryRun,WikipediaQueryRun,DuckDuckGoSearchRun
+from langchain.agents import initialize_agent,AgentType
+from langchain.callbacks import StreamlitCallbackHandler
+import os
+from dotenv import load_dotenv
+## Code
+####
 
-from langgraph.prebuilt import create_react_agent
+## Arxiv and wikipedia Tools
+arxiv_wrapper=ArxivAPIWrapper(top_k_results=1, doc_content_chars_max=200)
+arxiv=ArxivQueryRun(api_wrapper=arxiv_wrapper)
+
+api_wrapper=WikipediaAPIWrapper(top_k_results=1,doc_content_chars_max=200)
+wiki=WikipediaQueryRun(api_wrapper=api_wrapper)
+
+search=DuckDuckGoSearchRun(name="Search")
 
 
-# -------------------------------------------------------------
-# Streamlit UI
-# -------------------------------------------------------------
-st.title("🔎 Search Chatbot (Groq + Llama-3.3 70B + LangGraph)")
+st.title("🔎 LangChain - Chat with search")
+"""
+In this example, we're using `StreamlitCallbackHandler` to display the thoughts and actions of an agent in an interactive Streamlit app.
+Try more LangChain 🤝 Streamlit Agent examples at [github.com/langchain-ai/streamlit-agent](https://github.com/langchain-ai/streamlit-agent).
+"""
+
+## Sidebar for settings
 st.sidebar.title("Settings")
+api_key=st.sidebar.text_input("Enter your Groq API Key:",type="password")
 
-groq_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
-
-if not groq_key:
-    st.info("Please enter your Groq API Key")
-    st.stop()
-
-
-# -------------------------------------------------------------
-# Tools
-# -------------------------------------------------------------
-arxiv_tool = ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=1))
-wiki_tool = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper(top_k_results=1))
-duck_tool = DuckDuckGoSearchRun(name="Search")
-
-tools = [duck_tool, arxiv_tool, wiki_tool]
-
-
-# -------------------------------------------------------------
-# Groq Llama-3.3-70B LLM
-# -------------------------------------------------------------
-llm = ChatGroq(
-    groq_api_key=groq_key,
-    model_name="llama-3.3-70b-versatile",
-    streaming=True
-)
-
-
-# -------------------------------------------------------------
-# LangGraph Agent State Schema (REQUIRED)
-# -------------------------------------------------------------
-class AgentState(TypedDict):
-    messages: list
-
-
-# -------------------------------------------------------------
-# Create LangGraph ReAct Agent
-# -------------------------------------------------------------
-agent = create_react_agent(
-    model=llm,
-    tools=tools,
-    state_schema=AgentState
-)
-
-
-# -------------------------------------------------------------
-# Chat History (Streamlit local state)
-# -------------------------------------------------------------
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [
-        {
-            "role": "assistant",
-            "content": "Hi! I can search ArXiv, Wikipedia, and the web using Llama-3.3-70B. Ask me anything!"
-        }
+    st.session_state["messages"]=[
+        {"role":"assisstant","content":"Hi,I'm a chatbot who can search the web. How can I help you?"}
     ]
 
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    st.chat_message(msg["role"]).write(msg['content'])
 
+if prompt:=st.chat_input(placeholder="What is machine learning?"):
+    st.session_state.messages.append({"role":"user","content":prompt})
+    st.chat_message("user").write(prompt)
 
-# -------------------------------------------------------------
-# Chat Input Handling
-# -------------------------------------------------------------
-user_input = st.chat_input("Ask me anything...")
+    llm=ChatGroq(groq_api_key=api_key,model_name="Llama3-8b-8192",streaming=True)
+    tools=[search,arxiv,wiki]
 
-if user_input:
-    # show user msg
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.chat_message("user").write(user_input)
+    search_agent=initialize_agent(tools,llm,agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,handling_parsing_errors=True)
 
     with st.chat_message("assistant"):
-        cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
+        st_cb=StreamlitCallbackHandler(st.container(),expand_new_thoughts=False)
+        response=search_agent.run(st.session_state.messages,callbacks=[st_cb])
+        st.session_state.messages.append({'role':'assistant',"content":response})
+        st.write(response)
 
-        # LangGraph wants: {"messages": [{"role":..., "content":...}, ...]}
-        state = {"messages": st.session_state.messages}
-
-        output_state = agent.invoke(
-            state,
-            callbacks=[cb]
-        )
-
-        # final answer
-        answer = output_state["messages"][-1]["content"]
-
-        st.session_state.messages.append({"role": "assistant", "content": answer})
-        st.write(answer)
