@@ -8,19 +8,19 @@ from langchain_community.tools import (
     DuckDuckGoSearchRun,
 )
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
-from langchain.agents import create_agent   # UPDATED per deprecation warning
+from langchain.agents import create_agent   # updated import
 
 
 # -------------------------------------------------------------
 # UI
 # -------------------------------------------------------------
-st.title("🔎 Search Chatbot (Groq + Llama-3.3 70B + LangGraph)")
+st.title("🔎 Search Chatbot (Groq + Llama-3.3-70B + LangGraph)")
 st.sidebar.title("Settings")
 
-groq_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
+groq_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
 
 if not groq_key:
-    st.info("Please enter your Groq API Key")
+    st.info("Please enter your Groq API Key to continue")
     st.stop()
 
 
@@ -47,7 +47,7 @@ llm = ChatGroq(
 
 
 # -------------------------------------------------------------
-# Create agent (LangGraph → LangChain migration)
+# Create LangGraph Agent
 # -------------------------------------------------------------
 agent = create_agent(
     model=llm,
@@ -56,17 +56,14 @@ agent = create_agent(
 
 
 # -------------------------------------------------------------
-# Streamlit Chat UI (Local only)
+# Streamlit Chat UI (local only)
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {
-            "role": "assistant",
-            "content": "Hi! I can search ArXiv, Wikipedia and the web. Ask me anything!"
-        }
+        {"role": "assistant", "content": "Hi! Ask me anything… I can search ArXiv, Wikipedia, and the Web."}
     ]
 
-# Show chat
+# Show conversation
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
@@ -74,25 +71,26 @@ for msg in st.session_state.messages:
 # -------------------------------------------------------------
 # Handle Input
 # -------------------------------------------------------------
-user_input = st.chat_input("Ask me anything...")
+user_input = st.chat_input("Ask me anything…")
 
 if user_input:
+    # Save locally
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # *** CRITICAL FIX ***
-        # Always pass at least 1 message to Groq
+        # IMPORTANT: agent must receive at least one message
         state = {
             "messages": [{"role": "user", "content": user_input}],
-            "input": user_input
+            "input": user_input,
         }
 
         result = agent.invoke(state, callbacks=[cb])
 
-        answer = result["messages"][-1]["content"]
+        # ---- FIX: extract content from AIMessage ----
+        answer = result.content
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.write(answer)
