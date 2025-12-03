@@ -1,5 +1,4 @@
 import streamlit as st
-from typing_extensions import TypedDict
 
 from langchain_groq import ChatGroq
 from langchain_community.utilities import ArxivAPIWrapper, WikipediaAPIWrapper
@@ -15,7 +14,7 @@ from langgraph.prebuilt import create_react_agent
 st.title("🔎 Search Chatbot (Groq + Llama-3.3 70B + LangGraph)")
 st.sidebar.title("Settings")
 
-groq_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
+groq_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
 
 if not groq_key:
     st.info("Please enter your Groq API Key")
@@ -43,23 +42,12 @@ llm = ChatGroq(
 
 
 # -------------------------------------------------------------
-# REQUIRED STATE SCHEMA FOR LANGGRAPH
-# -------------------------------------------------------------
-class AgentState(TypedDict):
-    input: str
-    messages: list
-    steps: list
-    intermediate_steps: list
-    agent_outcome: dict
-
-
-# -------------------------------------------------------------
 # Build LangGraph ReAct Agent
 # -------------------------------------------------------------
+# 🚀 IMPORTANT: NO state_schema — LangGraph will build one internally
 agent = create_react_agent(
     model=llm,
-    tools=tools,
-    state_schema=AgentState
+    tools=tools
 )
 
 
@@ -68,15 +56,19 @@ agent = create_react_agent(
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Hi! Ask me anything — I can search ArXiv, Wikipedia, and the Web."}
+        {
+            "role": "assistant",
+            "content": "Hi! I can search ArXiv, Wikipedia, and the web. Ask me anything!"
+        }
     ]
 
+# Display chat
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 
 # -------------------------------------------------------------
-# Handle User Input
+# Handle Input
 # -------------------------------------------------------------
 user_input = st.chat_input("Ask me anything...")
 
@@ -87,18 +79,14 @@ if user_input:
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # Build complete state
-        state = {
-            "input": user_input,
-            "messages": st.session_state.messages,
-            "steps": [],
-            "intermediate_steps": [],
-            "agent_outcome": {}
-        }
+        # Minimal input for LangGraph
+        result = agent.invoke(
+            {"input": user_input},
+            callbacks=[cb]
+        )
 
-        output = agent.invoke(state, callbacks=[cb])
-
-        answer = output["messages"][-1]["content"]
+        # Response
+        answer = result["messages"][-1]["content"]
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.write(answer)
