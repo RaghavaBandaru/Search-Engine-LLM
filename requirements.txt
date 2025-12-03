@@ -1,32 +1,43 @@
+# Core LangChain + Ecosystem
 langchain
-python-dotenv
-ipykernel
 langchain-community
+langchain-openai
+langchain-groq
+langchain-text-splitters
+langchain_huggingface
+langchain_chroma
+
+# Embeddings / Vector DB
+chromadb
+faiss-cpu
+sentence_transformers
+duckdb
+
+# Search Tools
+duckduckgo_search==5.3.1b1
+ddgs   # REQUIRED for DuckDuckGo search tool
+
+# RAG / PDF / Parsing
 pypdf
+pymupdf
+unstructured
 bs4
 arxiv
-pymupdf
 wikipedia
-langchain-text-splitters
-langchain-openai
-chromadb
-sentence_transformers
-langchain_huggingface
-faiss-cpu
-langchain_chroma
-duckdb
-pandas
-openai
-langchain-groq
-duckduckgo_search==5.3.1b1
-pymupdf
-arxiv
-wikipedia
+youtube_transcript_api
+pytube
+
+# Database
 mysql-connector-python
 SQLAlchemy
-validators==0.28.1
-youtube_transcript_api
-unstructured
-pytube
-numexpr
+
+# General Utilities
+openai
 huggingface_hub
+numexpr
+validators==0.28.1
+python-dotenv
+pandas
+
+# Notebook Support (optional)
+ipykernel
