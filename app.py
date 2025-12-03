@@ -8,36 +8,36 @@ from langchain_community.tools import (
     DuckDuckGoSearchRun,
 )
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
-from langchain.agents import create_agent   # correct import
+from langchain.agents import create_agent
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
 
 
 # -------------------------------------------------------------
 # UI
 # -------------------------------------------------------------
 st.title("🔎 Search Chatbot (Groq + Llama-3.3-70B + LangGraph)")
-st.sidebar.title("Settings")
 
-groq_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
-
+groq_key = st.sidebar.text_input("Groq API Key:", type="password")
 if not groq_key:
-    st.info("Please enter your Groq API Key to continue")
     st.stop()
 
 
 # -------------------------------------------------------------
 # Tools
 # -------------------------------------------------------------
-arxiv_tool = ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=1))
-wiki_tool = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper(top_k_results=1))
-duck_tool = DuckDuckGoSearchRun(name="Search")
-
-tools = [duck_tool, arxiv_tool, wiki_tool]
+tools = [
+    DuckDuckGoSearchRun(name="Search"),
+    ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=1)),
+    WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper(top_k_results=1)),
+]
 
 
 # -------------------------------------------------------------
-# LLM (Groq)
+# LLM (Groq) + Safety Wrapper
 # -------------------------------------------------------------
-llm = ChatGroq(
+base_llm = ChatGroq(
     groq_api_key=groq_key,
     model_name="llama-3.3-70b-versatile",
     temperature=0.2,
@@ -45,43 +45,56 @@ llm = ChatGroq(
     streaming=True,
 )
 
+# ---- FIX: Ensure messages ALWAYS contains content ----
+def ensure_valid_messages(input_messages):
+    if not input_messages or len(input_messages) == 0:
+        return [{"role": "system", "content": "You are a helpful AI assistant."}]
+
+    # If last message is empty → patch it
+    last = input_messages[-1]
+    if "content" not in last or not last["content"]:
+        last["content"] = "Hello, please continue."
+
+    return input_messages
+
+
+safe_llm = RunnableLambda(lambda messages: base_llm.invoke(ensure_valid_messages(messages)))
+
 
 # -------------------------------------------------------------
-# Create LangGraph Agent
+# Agent
 # -------------------------------------------------------------
 agent = create_agent(
-    model=llm,
+    model=safe_llm,   # <<-- the important fix
     tools=tools,
 )
 
 
 # -------------------------------------------------------------
-# Streamlit Chat UI (session memory)
+# Streamlit Chat UI
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Hi! I can search ArXiv, Wikipedia, and the Web for you."}
+        {"role": "assistant", "content": "Hi! Ask me anything…"}
     ]
 
-# Render chat history
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 
 # -------------------------------------------------------------
-# Chat Input
+# Handle Input
 # -------------------------------------------------------------
 user_input = st.chat_input("Ask me anything…")
 
 if user_input:
-    # Add user message to history
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # Agent input state
+        # LangGraph input
         state = {
             "messages": [{"role": "user", "content": user_input}],
             "input": user_input
@@ -89,26 +102,11 @@ if user_input:
 
         result = agent.invoke(state, callbacks=[cb])
 
-        # ---------------------------------------------------------
-        # UNIVERSAL SAFE ANSWER EXTRACTION (fixes all errors)
-        # ---------------------------------------------------------
+        # Extract content safely
         if hasattr(result, "content"):
             answer = result.content
-
-        elif isinstance(result, dict):
-            if "output" in result:
-                answer = result["output"]
-            elif "messages" in result and len(result["messages"]) > 0:
-                last = result["messages"][-1]
-                if isinstance(last, dict):
-                    answer = last.get("content", "No content.")
-                else:
-                    answer = getattr(last, "content", "No content.")
-            else:
-                answer = "No valid response returned."
         else:
             answer = str(result)
 
-        # Save to session + display
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.write(answer)
