@@ -37,7 +37,7 @@ tools = [duckduckgo, arxiv, wiki]
 # -------------------------------------------------------------
 llm = ChatGroq(
     groq_api_key=api_key,
-    model_name="Llama3-8b-8192",
+    model_name="llama-3.3-70b-versatile",
     streaming=True
 )
 
@@ -87,4 +87,5 @@ if prompt_text := st.chat_input("Ask me anything..."):
 
         final_answer = response["output"]
         st.session_state.messages.append({"role": "assistant", "content": final_answer})
+
         st.write(final_answer)
