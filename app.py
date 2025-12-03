@@ -8,7 +8,7 @@ from langchain_community.tools import (
     DuckDuckGoSearchRun,
 )
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent   # UPDATED per deprecation warning
 
 
 # -------------------------------------------------------------
@@ -47,26 +47,26 @@ llm = ChatGroq(
 
 
 # -------------------------------------------------------------
-# LangGraph ReAct Agent (NO state schema, NO history injection)
+# Create agent (LangGraph → LangChain migration)
 # -------------------------------------------------------------
-agent = create_react_agent(
+agent = create_agent(
     model=llm,
-    tools=tools
+    tools=tools,
 )
 
 
 # -------------------------------------------------------------
-# Streamlit Chat UI (local only)
+# Streamlit Chat UI (Local only)
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
         {
             "role": "assistant",
-            "content": "Hi! I can search ArXiv, Wikipedia, and the web. Ask me anything!"
+            "content": "Hi! I can search ArXiv, Wikipedia and the web. Ask me anything!"
         }
     ]
 
-# Display chat
+# Show chat
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
@@ -77,17 +77,21 @@ for msg in st.session_state.messages:
 user_input = st.chat_input("Ask me anything...")
 
 if user_input:
-    # Store locally in Streamlit only — NOT passed to Groq
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # ✔ Only pass the current message
-        result = agent.invoke({"input": user_input}, callbacks=[cb])
+        # *** CRITICAL FIX ***
+        # Always pass at least 1 message to Groq
+        state = {
+            "messages": [{"role": "user", "content": user_input}],
+            "input": user_input
+        }
 
-        # Extract answer
+        result = agent.invoke(state, callbacks=[cb])
+
         answer = result["messages"][-1]["content"]
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
