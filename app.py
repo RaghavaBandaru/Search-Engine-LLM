@@ -35,7 +35,7 @@ tools = [duck_tool, arxiv_tool, wiki_tool]
 
 
 # -------------------------------------------------------------
-# LLM
+# LLM (Groq)
 # -------------------------------------------------------------
 llm = ChatGroq(
     groq_api_key=groq_key,
@@ -47,58 +47,48 @@ llm = ChatGroq(
 
 
 # -------------------------------------------------------------
-# Build LangGraph ReAct Agent
-# (NO state_schema — LangGraph handles it internally)
+# LangGraph ReAct Agent (NO state schema, NO history injection)
 # -------------------------------------------------------------
 agent = create_react_agent(
     model=llm,
-    tools=tools,
+    tools=tools
 )
 
 
 # -------------------------------------------------------------
-# Chat History
+# Streamlit Chat UI (local only)
 # -------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
         {
             "role": "assistant",
-            "content": (
-                "Hi! I can search ArXiv, Wikipedia, and the Web using "
-                "Llama-3.3-70B. Ask me anything!"
-            ),
+            "content": "Hi! I can search ArXiv, Wikipedia, and the web. Ask me anything!"
         }
     ]
 
-# Render history
+# Display chat
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 
 # -------------------------------------------------------------
-# Handle User Input
+# Handle Input
 # -------------------------------------------------------------
 user_input = st.chat_input("Ask me anything...")
 
 if user_input:
+    # Store locally in Streamlit only — NOT passed to Groq
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
 
-        # Correct state structure for LangGraph
-        state = {
-            "input": user_input,
-            "messages": st.session_state.messages,
-        }
+        # ✔ Only pass the current message
+        result = agent.invoke({"input": user_input}, callbacks=[cb])
 
-        result = agent.invoke(state, callbacks=[cb])
-
-        # Final answer from the latest message
+        # Extract answer
         answer = result["messages"][-1]["content"]
 
-        st.session_state.messages.append(
-            {"role": "assistant", "content": answer}
-        )
+        st.session_state.messages.append({"role": "assistant", "content": answer})
         st.write(answer)
